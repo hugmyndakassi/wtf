@@ -66,6 +66,13 @@ if (WIN32)
         "$<$<COMPILE_LANGUAGE:CXX>:/Zc:__cplusplus>"
     )
 
+    # /utf-8 for fmt
+    target_compile_options(
+        wtf
+        PRIVATE
+        "$<$<COMPILE_LANGUAGE:CXX>:/utf-8>"
+    )
+
     # Delay loading dbgeng.dll:
     #   If the user doesn't have dbghelp/symsrv.dll there is code to find a copy of the
     #   dlls on the system and copy them in the directory and then carrying on and

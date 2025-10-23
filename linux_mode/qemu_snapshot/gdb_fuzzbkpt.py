@@ -248,15 +248,8 @@ class kernel:
     class task:
         @staticmethod
         def get_name():
-            task_struct = str(kernel.parse_and_eval("&$lx_current()"))
-
-            process_name = str(
-                kernel.parse_and_eval(f"((struct task_struct*){task_struct})->comm")
-            )
-
-            process_name = process_name.replace('"', "")
+            process_name = str(kernel.parse_and_eval("$lx_current().comm"))[1:]
             process_name = process_name[: process_name.find("\\0")]
-
             return process_name
 
 
