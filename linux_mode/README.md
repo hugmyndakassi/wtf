@@ -13,11 +13,60 @@
 
 ## Overview
 
-This provides experimental Linux ELF userland snapshotting support based on previous work by [Kasimir](https://github.com/0vercl0k/wtf/pull/102) and scripts from [Snapchange](https://github.com/awslabs/snapchange/tree/main/qemu_snapshot).
+This provides experimental Linux ELF userland snapshotting support based on previous work by [Kasimir](https://github.com/0vercl0k/wtf/pull/102) and scripts from [Snapchange](https://github.com/awslabs/snapchange/tree/main/qemu_snapshot). It has been tested and should work out of the box against [Ubuntu 'Noble Numbat' 24.04](https://ubuntu.com/download/desktop?version=24.04&architecture=amd64&lts=true).
 
 <p align='center'>
 <img src='../pics/wtf-linux-snapshot.webp'>
 </p>
+
+It also has been tested against [Ubuntu 'Jammy Jellyfish' 22.04](https://releases.ubuntu.com/jammy/) but requires you to rebuild [`libbochscpu_ffi.a`](../src/libs/bochscpu-bins/lib/libbochscpu_ffi.a) in order to build `wtf`. Otherwise, you will encounter these linker errors:
+
+```console
+user@pc:~/wtf/src/build$ CXX=clang++-20 CC=clang-20 ./build-release.sh
+...
+[36/36] Linking CXX executable wtf
+FAILED: wtf
+...
+/usr/bin/ld: ../libs/bochscpu-bins/lib/libbochscpu_ffi.a(85d2494f718bd438-paramtree.o): in function `bx_param_num_c::parse_param(char const*)':
+paramtree.cc:(.text._ZN14bx_param_num_c11parse_paramEPKc+0x5b): undefined reference to `__isoc23_strtoull'
+/usr/bin/ld: paramtree.cc:(.text._ZN14bx_param_num_c11parse_paramEPKc+0xa9): undefined reference to `__isoc23_strtoull'
+/usr/bin/ld: paramtree.cc:(.text._ZN14bx_param_num_c11parse_paramEPKc+0xd5): undefined reference to `__isoc23_strtoull'
+/usr/bin/ld: paramtree.cc:(.text._ZN14bx_param_num_c11parse_paramEPKc+0x111): undefined reference to `__isoc23_strtoull'
+/usr/bin/ld: ../libs/bochscpu-bins/lib/libbochscpu_ffi.a(85d2494f718bd438-paramtree.o): in function `bx_param_bytestring_c::parse_param(char const*)':
+paramtree.cc:(.text._ZN21bx_param_bytestring_c11parse_paramEPKc+0x97): undefined reference to `__isoc23_sscanf'
+/usr/bin/ld: ../libs/bochscpu-bins/lib/libbochscpu_ffi.a(msr.o): in function `BX_CPU_C::load_MSRs(char const*)':
+/mnt/c/work/codes/wtf/src/libs/bochscpu-bins/bxbuild-lin/bochscpu-build/Bochs/bochs/cpu/msr.cc:1557: undefined reference to `__isoc23_sscanf'
+clang++-20: error: linker command failed with exit code 1 (use -v to see invocation)
+ninja: build stopped: subcommand failed.
+```
+
+Rebuild `libbochscpu_ffi` by running the [build-bochscpu.sh](../src/libs/bochscpu-bins/build-bochscpu.sh) script like so to build the `libbochscpu_ffi.a` library (a Rust toolchain is needed; you can install it with `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`)..:
+
+```console
+user@pc:~/wtf/src/libs/bochscpu-bins$ bash build-bochscpu.sh
+...
+Finished `release` profile [optimized] target(s) in 11.81s
+~/wtf/src/libs/bochscpu-bins
+user@pc:~/wtf/src/libs/bochscpu-bins$ ls bxbuild-lin/bochscpu-ffi/target/x86_64-unknown-linux-gnu/release/*.a
+bxbuild-lin/bochscpu-ffi/target/x86_64-unknown-linux-gnu/release/libbochscpu_ffi.a
+```
+
+..this should have generated a `libbochscpu_ffi.a` file. Move into `src/libs/bochscpu-bins/lib`:
+
+```console
+user@pc:~/wtf/src/libs/bochscpu-bins$ mv bxbuild-lin/bochscpu-ffi/target/x86_64-unknown-linux-gnu/release/libbochscpu_ffi.a lib
+user@pc:~/wtf/src/libs/bochscpu-bins$ git status
+...
+        modified:   lib/libbochscpu_ffi.a
+```
+
+Linking `wtf` should now be working successfully:
+
+```console
+user@pc:~/wtf/src/build$ CXX=clang++-20 CC=clang-20 ./build-release.sh
+...
+[1/1] Linking CXX executable wtf
+```
 
 ## Setting up the environment
 
@@ -62,6 +111,8 @@ Start the virtual machine in one tab while in the snapshot subdirectory by runni
 ```console
 user@pc:/wtf/linux_mode/crash_test$ ../qemu_snapshot/gdb_server.sh
 ```
+
+(If you are running into `Could not access KVM kernel module: Permission denied` or KVM related errors, close an re-open your shell. `setup.sh` added the current user to the `kvm` group and it seems to require to close / re-open the shell).
 
 In a separate tab, scp the target file to the target VM. With `crash_test` this can be done by first compiling the target file:
 
@@ -161,7 +212,6 @@ Breakpoint 1, 0x00005555555551e9 in do_crash_test ()
 ```
 
 ## Harnessing and Fuzzing 
-
 Writing harnesses is the same process as writing harnesses for Windows executables. Example harnesses for crash_test and page_fault_test are present in [src/wtf/fuzzer_linux_crash_test.cc](../src/wtf/fuzzer_linux_crash_test.cc) and [src/wtf/fuzzer_linux_page_fault_test.cc](../src/wtf/fuzzer_linux_page_fault_test.cc).
 
 Now that we have everything set up we can start our server and fuzzer:
